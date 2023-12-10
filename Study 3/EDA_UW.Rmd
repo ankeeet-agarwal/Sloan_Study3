@@ -1,0 +1,266 @@
+```{r results ='hide', warning=FALSE, message=FALSE}
+library(tidyverse)
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(rlist)
+library(lavaan)
+library(semTools)
+library(gridExtra)
+library(corrplot)
+library(writexl)
+```
+
+```{r}
+load("CFA_clean_data_3.RData")
+head(con_data)
+```
+
+### Numeric Summary of all latent variables
+
+```{r}
+columns_to_summarize <- c("int_Interest", "int_Intention", "PB_uw", "SB_uw", "Trust_uw", "EC_uw", "CNS_uw", "CIJM_uw", "SN_uw", "TB_uw", "bill_fixed", "age", "ac_score")
+
+# Calculate means and standard deviations by category for specified columns
+latent_means_group <- con_data %>%  group_by(Condition_fact) %>%  summarise_at(vars(columns_to_summarize),list(Mean = ~ mean(., na.rm = TRUE), SD = ~ sd(., na.rm = TRUE))
+  )
+latent_means_group
+```
+```{r}
+# Calculate means and standard deviations by category for specified columns
+latent_means <- con_data  %>% summarise_at(vars(columns_to_summarize),list(Mean = ~ mean(., na.rm = TRUE), SD = ~ sd(., na.rm = TRUE)))
+latent_means
+```
+
+
+#### Univariate plots of belief variables
+```{r}
+#function to create univariate histograms
+
+create_pretty_histogram <- function(data, variable_column, x_axis_title, bwide) {
+  
+ ggplot(data, aes(x = !!sym(variable_column))) +
+    geom_histogram(binwidth = bwide, fill = "#66c2a5", color = "#5A5A5A", bins = 10, alpha = 0.7,aes(y = (..count..)/sum(..count..) * 100)) +
+    scale_fill_viridis_d(option = "magma", guide = "none") +
+    labs(
+      x = x_axis_title,
+      y = "Percentage"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_blank(), 
+      axis.title = element_text(size = 12),
+      axis.text = element_text(size = 10),
+      legend.position = "none"
+    )
+}
+```
+
+```{r}
+#Create multiple plots
+#PB
+hist_pb <- create_pretty_histogram(con_data, "PB_uw", "Perceived Benefits", 0.15)
+
+#SB
+hist_sb <- create_pretty_histogram(con_data, "SB_uw", "Soft Barriers", 0.15)
+
+#Trust
+hist_tr <- create_pretty_histogram(con_data, "Trust_uw", "Trust", 0.5)
+
+#EC
+hist_ec <- create_pretty_histogram(con_data, "EC_uw", "Environmental Concern", 0.15)
+
+#CNS
+hist_cns <- create_pretty_histogram(con_data, "CNS_uw", "Consumer Novelty Seeking", 0.15)
+
+#cIJm
+hist_cijm <- create_pretty_histogram(con_data, "CIJM_uw", "Consumer Independent Judgement Making", 0.15)
+
+#SN
+hist_sn <- create_pretty_histogram(con_data, "SN_uw", "Subjective Norms", 0.15)
+
+#TB
+hist_tb <- create_pretty_histogram(con_data, "TB_uw", "Technical Barriers", 0.5)
+
+#Interest
+hist_interest <- create_pretty_histogram(con_data, "int_Interest", "Interest", 1.0)
+
+#Intention
+hist_intention <- create_pretty_histogram(con_data, "int_Intention", "Intention", 1.0)
+
+latent_var_plots <- grid.arrange(hist_interest, hist_intention, hist_pb, hist_sb, hist_tr, hist_ec, hist_cns, hist_cijm, hist_sn, hist_tb, ncol = 3)
+
+latent_var_plots
+```
+
+```{r}
+# Export the grid as an image
+ggsave("Study3_Results/plots_uw/latent_var_plots.png", latent_var_plots, width = 10, height = 6, units = "in")
+```
+
+```{r}
+#try transforming the variables and see what are the changes to distribution
+
+selected_columns <- c("PB_uw", "SB_uw", "Trust_uw", "EC_uw", "CNS_uw", "CIJM_uw", "SN_uw", "int_Interest", "int_Intention", "SN_uw", "TB_uw","bill_fixed", "age")
+transformed_data <- con_data %>%
+  mutate(across(all_of(selected_columns), ~ scale(.), .names = "scaled_uw_{.col}"))
+
+```
+
+
+```{r}
+#Create multiple plots
+#PB
+hist_pb <- create_pretty_histogram(transformed_data, "scaled_uw_PB_uw", "Percieved Benefits", 0.15)
+
+#SB
+hist_sb <- create_pretty_histogram(transformed_data, "scaled_uw_SB_uw", "Soft Barriers", 0.15)
+
+#Trust
+hist_tr <- create_pretty_histogram(transformed_data, "scaled_uw_Trust_uw", "Trust", 0.15)
+
+#EC
+hist_ec <- create_pretty_histogram(transformed_data, "scaled_uw_EC_uw", "Environmental Concern", 0.15)
+
+#CNS
+hist_cns <- create_pretty_histogram(transformed_data, "scaled_uw_CNS_uw", "Consumer Novelty Seeking", 0.15)
+
+#cIJm
+hist_cijm <- create_pretty_histogram(transformed_data, "scaled_uw_CIJM_uw", "Consumer Independent Judgement Making", 0.15)
+
+#SN
+hist_sn <- create_pretty_histogram(transformed_data, "scaled_uw_SN_uw", "Subjective Norms", 0.15)
+
+#TB
+hist_tb <- create_pretty_histogram(transformed_data, "scaled_uw_TB_uw", "Technical Barriers", 0.15)
+
+#Interest
+hist_interest <- create_pretty_histogram(transformed_data, "scaled_uw_int_Interest", "Interest", 0.3)
+#Intention
+hist_intention <- create_pretty_histogram(transformed_data, "scaled_uw_int_Intention", "Intention", 0.3)
+
+latent_var_plots_trans <- grid.arrange(hist_interest, hist_intention, hist_pb, hist_sb,hist_tr, hist_ec, hist_cns, hist_cijm, hist_sn, hist_tb, ncol = 3)
+
+latent_var_plots_trans
+```
+```{r}
+ggsave("Study3_Results/plots_uw/scaledtrans_plots.png", latent_var_plots_trans, width = 10, height = 6, units = "in")
+```
+
+```{r}
+boxwplot <- function(data, xvar, yvar, xlab, ylab, xval, heading){
+ggplot(data, aes(x = !!sym(xvar), y = !!sym(yvar), fill = !!sym(xvar))) +
+  geom_boxplot(alpha = 0.7) + stat_summary(fun.y=mean, geom="point", shape=20, size=3, color="dark red",
+             position = position_dodge2(width = 0.75,   
+                                        preserve = "single")) +
+  labs(title = heading,
+       x = xlab,
+       y = ylab) +
+  theme_minimal() +
+  theme(legend.position = "none", text = element_text(size=9)) + scale_x_discrete(labels=xval)
+}
+```
+
+```{r}
+ pbvsgrp<- boxwplot(con_data, "Condition_fact", "PB_uw", "Group Assignment", "Perceived Benefits", c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), "Independent Variable Variation by Group Assignment")
+
+sbvsgrp<- boxwplot(con_data, "Condition_fact", "SB_uw", "Group Assignment", "Soft Barriers",c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), " ")
+ 
+trvsgrp<- boxwplot(con_data, "Condition_fact", "Trust_uw", "Group Assignment", "Trust in Utility", c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), " ")
+
+bi_boxplots1 <- grid.arrange(pbvsgrp, sbvsgrp, trvsgrp, ncol = 1)
+ggsave("Study3_Results/plots_uw/bi_boxplots1.png", bi_boxplots1, width = 10, height = 6, units = "in")
+```
+
+```{r}
+ ecvsgrp<- boxwplot(con_data, "Condition_fact", "EC_uw", "Group Assignment", "Environmental Concern", c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), "Independent Variable Variation by Group Assignment")
+
+snvsgrp<- boxwplot(con_data, "Condition_fact", "SN_uw", "Group Assignment", "Subjective Norms",c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), " ")
+ 
+tbvsgrp<- boxwplot(con_data, "Condition_fact", "TB_uw", "Group Assignment", "Technical Barriers", c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), " ")
+
+bi_boxplots2 <- grid.arrange(ecvsgrp,snvsgrp, tbvsgrp, ncol = 1)
+ggsave("Study3_Results/plots_uw/bi_boxplots2.png", bi_boxplots2, width = 10, height = 6, units = "in")
+```
+
+
+
+```{r}
+save(con_data, file = "model_data_3b.RData")
+```
+
+
+
+
+```{r}
+load("final_data.RData")
+pvowners_con_data
+```
+```{r}
+rcvsint <- boxwplot(pvowners_con_data, "RC", "int_Interest", "Renewable Content", "Interest",c('No Info', '30% green', '60% green', '100%'), "Interest by Renewable Content")
+
+ccavsinten <- boxwplot(pvowners_con_data, "CCA", "int_Intention", "CCA Context", "Intention", c("Yes", "No"), "Intention by CCA Context")
+
+rcvsdep <- grid.arrange(rcvsint,ccavsinten, ncol = 1)
+ggsave("Study3_Results/Dep_plots_nopv.png", rcvsdep, width = 10, height = 6, units = "in")
+```
+
+```{r}
+perform_one_way_anova_multiple <- function(tibble_data, independent_var_name) {
+  # Initialize an empty dataframe to store results
+  result_df <- data.frame(DependentVariable = character(0), FStatistic = numeric(0), PValue = numeric(0))
+  
+  # Get a vector of dependent variable names (all numeric columns except the independent variable)
+  dependent_var_names <- setdiff(names(tibble_data), independent_var_name)
+  
+  # Perform one-way ANOVA for each dependent variable
+  for (dep_var in dependent_var_names) {
+    # Perform one-way ANOVA
+    anova_result <- aov(formula(paste(dep_var, "~", independent_var_name)), data = tibble_data)
+    
+    # Get the F-statistic and p-value
+    f_statistic <- summary(anova_result)[[1]][["F value"]][1]
+    df1 <- summary(anova_result)[[1]][["Df"]][1]
+    df2 <- summary(anova_result)[[1]][["Df"]][2]
+    p_value <- summary(anova_result)[[1]][["Pr(>F)"]][1]
+    
+    # Add the results to the dataframe
+    result_df <- rbind(result_df, data.frame(DependentVariable = dep_var, FStatistic = f_statistic, DegreesOfFreedom1 = df1, DegreesOfFreedom2 = df2, PValue = p_value))
+  }
+  
+  return(result_df)
+}
+
+```
+
+```{r}
+aov_data <- pvowners_con_data %>% select(int_Interest, int_Intention, PB_uw,SB_uw,Trust_uw,EC_uw,CNS_uw,CIJM_uw,SN_uw,TB_uw,Condition_fact, attentive, bill_fixed, White, age, col_edu, inc_int, liberal, democrat, Female, CCA_aware_bin, home_bin, pv_ads_bin)
+
+independent_var_name <- "Condition_fact"
+
+# Call the function to perform one-way ANOVA on multiple variables
+anova_results <- perform_one_way_anova_multiple(aov_data, independent_var_name)
+
+# View the ANOVA results
+print(anova_results)
+```
+
+```{r}
+TukeyHSD(aov(Trust_uw ~ Condition_fact, data = pvowners_con_data))
+```
+
+```{r}
+TukeyHSD(aov(int_Intention ~ Condition_fact, data = pvowners_con_data))
+```
+
+```{r}
+TukeyHSD(aov(SN_uw ~ Condition_fact, data = pvowners_con_data))
+```
+```{r}
+columns_to_summarize <- c("int_Interest", "int_Intention", "PB_w", "SB_w", "Trust_w", "EC_w", "CNS_w", "CIJM_w", "SN_w", "TB_w", "bill_fixed", "age", "ac_score")
+
+# Calculate means and standard deviations by category for specified columns
+latent_means_group <- pvowners_con_data %>%  group_by(Condition_fact) %>%  summarise_at(vars(columns_to_summarize),list(Mean = ~ mean(., na.rm = TRUE), SD = ~ sd(., na.rm = TRUE))
+  )
+latent_means_group
+```

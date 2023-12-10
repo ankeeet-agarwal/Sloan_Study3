@@ -1,0 +1,536 @@
+
+```{r results ='hide', warning=FALSE, message=FALSE}
+library(tidyverse)
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(rlist)
+library(lavaan)
+library(semTools)
+library(gridExtra)
+library(rms)
+library(writexl)
+library(openxlsx)
+```
+
+```{r}
+load("model_data_3b.RData")
+head(con_data)
+```
+
+### perform standardization transform
+```{r}
+model_variables <- c("PB_uw", "Trust_uw", "SB_uw", "EC_uw", "CNS_uw", "CIJM_uw", "SN_uw", "int_Interest", "int_Intention", "TB_uw", "inc_int", "edu_int", "age", "bill_fixed", "ac_score")
+con_data <- con_data %>%  mutate(across(all_of(model_variables), ~ scale(.), .names = "scaled_{.col}"))
+```
+
+
+```{r}
+head(con_data)
+```
+
+```{r}
+## correlation of all observed measures
+require(corrplot)
+modeldata <- con_data %>% select(scaled_int_Interest, scaled_int_Intention,scaled_inc_int,liberal,scaled_PB_uw,scaled_SB_uw,scaled_Trust_uw,scaled_EC_uw,scaled_CNS_uw,scaled_CIJM_uw,scaled_SN_uw, scaled_bill_fixed, scaled_age,CCA_aware_bin,home_bin,have_solar_bin,pv_ads_bin,democrat,Female, White,attentive,col_edu)
+modeldata<-na.omit(modeldata)
+
+#calculate correlation
+correlations <- cor(modeldata)
+
+#plot correlation
+png("Study3_Results/plots_uw/corr_plots.png", width = 1000, height = 1000)
+
+corrplot(correlations, method = "color", outline = T, addgrid.col = "darkgray", order="hclust", addrect = 4, rect.col = "black", rect.lwd = 5,cl.pos = "b", tl.col = "indianred4", tl.cex = 1.5, cl.cex = 1.5, addCoef.col = "white", number.digits = 2, number.cex = 0.75, col = colorRampPalette(c("darkred","white","midnightblue"))(100))
+
+dev.off()  # Close the graphics device
+```
+
+
+
+## Linear Regression
+
+### linear regression using scaled values
+```{r}
+#function to return linear regression results
+
+multiple_regression_summary <- function(model) {
+  # Get coefficient estimates
+  coefficients <- coef(model)
+  
+  # Get standard errors
+  standard_errors <- sqrt(diag(vcov(model)))
+  
+  # Get p-values
+  p_values <- summary(model)$coefficients[, "Pr(>|t|)"]
+  
+  # Calculate AIC
+  aic <- AIC(model)
+  
+  # Calculate adjusted R-squared
+  adj_r_squared <- summary(model)$adj.r.squared
+  # Calculate Variance Inflation Factors (VIF)
+  vif_values <- vif(model)
+  
+   n_observations <- nrow(model$model)
+  
+  # Create a summary data frame
+  summary_data <- data.frame(
+    Coefficient = coefficients,
+    StdError = standard_errors,
+    PValue = p_values,
+    AIC = aic,
+    AdjRSquared = adj_r_squared,
+    VIF = c("NA", vif_values),
+    N_Observations = n_observations
+  )
+  
+  return(summary_data)
+}
+```
+
+#### First include only message related variables and main effects
+```{r}
+# Fit a linear regression model for interest
+model1a <- lm( scaled_int_Interest ~ RC + CCA+  scaled_PB_uw +  scaled_Trust_uw +  scaled_SB_uw, data = con_data)
+
+# Call the function and get the results
+results_model1a <- multiple_regression_summary(model1a)
+results_model1a
+```
+
+```{r}
+# Fit a linear regression model for interest
+model1b <- lm(scaled_int_Intention ~ RC + CCA+  scaled_PB_uw +  scaled_Trust_uw +  scaled_SB_uw, data = con_data)
+
+# Call the function and get the results
+results_model1b<- multiple_regression_summary(model1b)
+results_model1b
+```
+
+
+```{r}
+#EXPORT to excel
+
+wb1 <- createWorkbook()
+
+update_excel <- function(workbook, sheet_name, df1, df2){
+
+addWorksheet(workbook, sheet_name)
+# Write dataframes to the worksheet with spacing
+writeData(workbook, sheet_name, df1, startCol = 1, startRow = 1)
+writeData(workbook, sheet_name, df2, startCol = ncol(df1) + 3, startRow = 1)
+}
+```
+
+```{r}
+update_excel(wb1, "Main Effects", results_model1a, results_model1b)
+```
+
+#### Second include interactions between messages and beleifs
+
+```{r}
+# Fit a logistic regression model for interest
+model2a <- lm(scaled_int_Interest ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw, data = con_data)
+
+# Call the function and get the results
+results_model2a <- multiple_regression_summary(model2a)
+results_model2a
+```
+
+```{r}
+# Fit a logistic regression model for interest
+model2b <- lm(scaled_int_Intention ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw, data = con_data)
+
+# Call the function and get the results
+results_model2b <- multiple_regression_summary(model2b)
+results_model2b
+```
+
+```{r}
+update_excel(wb1, "All Interactions", results_model2a, results_model2b)
+```
+
+```{r}
+model3a <- lm(scaled_int_Interest ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw , data = con_data)
+
+results_model3a <- multiple_regression_summary(model3a)
+results_model3a
+```
+
+
+```{r}
+model3b <- lm(scaled_int_Intention ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw , data = con_data)
+
+results_model3b <- multiple_regression_summary(model3b)
+results_model3b
+```
+```{r}
+update_excel(wb1, "all beliefs and interactions", results_model3a, results_model3b)
+```
+
+```{r}
+model4a <- lm(scaled_int_Interest ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw + scaled_inc_int + scaled_edu_int + scaled_age, data = con_data)
+
+results_model4a <- multiple_regression_summary(model4a)
+results_model4a
+```
+
+```{r}
+model4b <- lm(scaled_int_Intention  ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw + scaled_inc_int + scaled_edu_int + scaled_age + home_bin, data = con_data)
+
+results_model4b <- multiple_regression_summary(model4b)
+results_model4b
+```
+
+```{r}
+update_excel(wb1, "all variables", results_model4a, results_model4b)
+```
+
+```{r}
+#export excel sheet
+saveWorkbook(wb1, "Study3_Results/plots_uw/Linear_Reg_all_sample.xlsx", overwrite = TRUE)
+```
+
+## Filter out homeowners
+
+```{r}
+#repeat anovas time time filtering for homeowners
+homeowners_con_data <- con_data %>% filter(home_bin == 1)
+```
+
+
+
+#### First include only message related variables and main effects
+```{r}
+# Fit a logistic regression model for interest
+model1a <- lm( int_Interest ~ RC + CCA+  scaled_PB_uw +  scaled_Trust_uw +  scaled_SB_uw, data =  homeowners_con_data)
+
+# Call the function and get the results
+results_model1a <- multiple_regression_summary(model1a)
+#results_model1a
+
+```
+```{r}
+# Fit a logistic regression model for interest
+model1b <- lm(scaled_int_Intention ~ RC + CCA + scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw, data =  homeowners_con_data)
+
+# Call the function and get the results
+results_model1b<- multiple_regression_summary(model1b)
+#results_model1b
+```
+```{r}
+#EXPORT to excel
+
+wb2 <- createWorkbook()
+
+```
+
+
+```{r}
+update_excel(wb2, "Main Effects", results_model1a, results_model1b)
+```
+
+#### Second include interactions between messages
+
+```{r}
+# Fit a logistic regression model for interest
+model2a <- lm(scaled_int_Interest ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw, data =  homeowners_con_data)
+
+# Call the function and get the results
+results_model2a <- multiple_regression_summary(model2a)
+#results_model2a
+```
+
+```{r}
+# Fit a logistic regression model for interest
+model2b <- lm(scaled_int_Intention ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw, data =  homeowners_con_data)
+
+# Call the function and get the results
+results_model2b <- multiple_regression_summary(model2b)
+#results_model2b
+```
+
+```{r}
+update_excel(wb2, "Message Interactions", results_model2a, results_model2b)
+```
+
+#### Third include interactions between messages and beliefs
+
+```{r}
+model3a <- lm(scaled_int_Interest ~  RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw, data =  homeowners_con_data)
+
+results_model3a <- multiple_regression_summary(model3a)
+results_model3a
+```
+
+```{r}
+model3b <- lm(scaled_int_Intention  ~  RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw , data =  homeowners_con_data)
+
+results_model3b <- multiple_regression_summary(model3b)
+results_model3b
+```
+
+```{r}
+update_excel(wb2, "all Interactions", results_model3a, results_model3b)
+```
+
+#### Fourth Model everything
+
+```{r}
+model4a <- lm(scaled_int_Interest ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw+ scaled_inc_int + scaled_edu_int + scaled_age, data = homeowners_con_data)
+
+results_model4a <- multiple_regression_summary(model4a)
+results_model4a
+```
+
+
+```{r}
+model4b <- lm(scaled_int_Intention  ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw+ scaled_inc_int + scaled_edu_int + scaled_age, data = homeowners_con_data)
+
+results_model4b <- multiple_regression_summary(model4b)
+results_model4b
+```
+
+```{r}
+update_excel(wb2, "all variables", results_model4a, results_model4b)  
+```
+```{r}
+#export excel sheet
+saveWorkbook(wb2, "Study3_Results/plots_uw/Linear_Reg_homeowners.xlsx", overwrite = TRUE)
+```
+
+
+## Modeling by controlling for PV ownership
+
+```{r}
+#repeat anovas time time filtering for homeowners
+pvowners_con_data <- con_data %>% filter(have_solar_bin == 0)
+```
+##  ANOVA
+
+### One-way ANOVA
+
+```{r}
+# Perform two-way ANOVA
+anova_interest <- aov(scaled_int_Interest ~ RC + CCA, data = pvowners_con_data)
+
+
+anova_intention <- aov(scaled_int_Intention ~  CCA, data = pvowners_con_data)
+# Display ANOVA summary
+#summary(anova_interest)
+summary(anova_intention)
+```
+
+#### First include only message related variables and main effects
+```{r}
+# Fit a logistic regression model for interest
+model1a <- lm( int_Interest ~ RC + CCA+  scaled_PB_uw +  scaled_Trust_uw +  scaled_SB_uw, data =  pvowners_con_data)
+
+# Call the function and get the results
+results_model1a <- multiple_regression_summary(model1a)
+summary(model1a)
+
+```
+```{r}
+# Fit a logistic regression model for interest
+model1b <- lm(scaled_int_Intention ~ RC + CCA+  scaled_PB_uw +  scaled_Trust_uw +  scaled_SB_uw, data =  pvowners_con_data)
+
+# Call the function and get the results
+results_model1b<- multiple_regression_summary(model1b)
+summary(model1b)
+```
+
+
+```{r}
+#EXPORT to excel
+
+wb3 <- createWorkbook()
+
+```
+
+
+```{r}
+update_excel(wb3, "Main Effects", results_model1a, results_model1b)
+```
+
+#### Second include interactions between messages
+
+```{r}
+# Fit a logistic regression model for interest
+model2a <- lm(scaled_int_Interest ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw, data =  pvowners_con_data)
+
+# Call the function and get the results
+results_model2a <- multiple_regression_summary(model2a)
+#summary(model2a)
+```
+
+```{r}
+# Fit a logistic regression model for interest
+model2b <- lm(scaled_int_Intention ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw, data =  pvowners_con_data)
+
+# Call the function and get the results
+results_model2b <- multiple_regression_summary(model2b)
+#summary(model2b)
+```
+
+```{r}
+update_excel(wb3, "Message Interactions", results_model2a, results_model2b)
+```
+
+#### Third include interactions between messages and beliefs
+
+```{r}
+model3a <- lm(scaled_int_Interest ~  RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw, data =  pvowners_con_data)
+
+results_model3a <- multiple_regression_summary(model3a)
+summary(model3a)
+```
+```{r}
+results_model3a
+```
+
+```{r}
+model3b <- lm(scaled_int_Intention  ~  RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw, data =  pvowners_con_data)
+
+results_model3b <- multiple_regression_summary(model3b)
+summary(model3b)
+```
+
+```{r}
+update_excel(wb3, "all Interactions", results_model3a, results_model3b)
+```
+
+```{r}
+model4a <- lm(scaled_int_Interest  ~  RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw+ scaled_inc_int + scaled_edu_int + scaled_age + attentive+ home_bin, data =  pvowners_con_data)
+
+#results_model4a <- multiple_regression_summary(model4a)
+summary(model4a)
+```
+
+```{r}
+model4b <- lm(scaled_int_Intention  ~  RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw+ scaled_inc_int + scaled_edu_int + scaled_age + attentive+ home_bin, data =  pvowners_con_data)
+
+results_model4b <- multiple_regression_summary(model4b)
+summary(model4b)
+```
+
+```{r}
+update_excel(wb3, "all variables", results_model4a, results_model4b)  
+```
+
+```{r}
+#export excel sheet
+saveWorkbook(wb3, "Study3_Results/plots_uw/Linear_Reg_nopvowners.xlsx", overwrite = TRUE)
+```
+
+## Modeling by controlling for attentiveness
+
+```{r}
+#repeat anovas time time filtering for homeowners
+attentive_con_data <- con_data %>% filter(attentive == 1)
+```
+
+
+#### First include only message related variables and main effects
+```{r}
+# Fit a logistic regression model for interest
+model1a <- lm( int_Interest ~ RC + CCA+  scaled_PB_uw +  scaled_Trust_uw +  scaled_SB_uw, data =  attentive_con_data)
+
+# Call the function and get the results
+results_model1a <- multiple_regression_summary(model1a)
+#results_model1a
+
+```
+```{r}
+# Fit a logistic regression model for interest
+model1b <- lm(scaled_int_Intention ~ RC + CCA+  scaled_PB_uw +  scaled_Trust_uw +  scaled_SB_uw, data =  attentive_con_data)
+
+# Call the function and get the results
+results_model1b<- multiple_regression_summary(model1b)
+#results_model1b
+```
+
+
+```{r}
+#EXPORT to excel
+
+wb4 <- createWorkbook()
+
+```
+
+
+```{r}
+update_excel(wb4, "Main Effects", results_model1a, results_model1b)
+```
+
+#### Second include interactions between messages
+
+```{r}
+# Fit a logistic regression model for interest
+model2a <- lm(scaled_int_Interest ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw, data =  attentive_con_data)
+
+# Call the function and get the results
+results_model2a <- multiple_regression_summary(model2a)
+results_model2a
+```
+
+```{r}
+# Fit a logistic regression model for interest
+model2b <- lm(scaled_int_Intention ~ RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw, data =  attentive_con_data)
+
+# Call the function and get the results
+results_model2b <- multiple_regression_summary(model2b)
+results_model2b
+```
+
+```{r}
+update_excel(wb4, "Message Interactions", results_model2a, results_model2b)
+```
+
+#### Third include interactions between messages and beliefs
+
+```{r}
+model3a <- lm(scaled_int_Interest ~  RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw, data =  attentive_con_data)
+
+results_model3a <- multiple_regression_summary(model3a)
+results_model3a
+```
+
+```{r}
+model3b <- lm(scaled_int_Intention  ~  RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw, data =  attentive_con_data)
+
+results_model3b <- multiple_regression_summary(model3b)
+#results_model3b
+```
+
+```{r}
+update_excel(wb4, "all Interactions", results_model3a, results_model3b)
+```
+
+```{r}
+model4a <- lm(scaled_int_Interest  ~  RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw+ scaled_inc_int + scaled_edu_int + scaled_age, data =  attentive_con_data)
+
+results_model4a <- multiple_regression_summary(model4a)
+results_model4a
+```
+
+```{r}
+model4b <- lm(scaled_int_Intention  ~  RC + CCA + RC*CCA+ scaled_PB_uw + scaled_Trust_uw + scaled_SB_uw + RC*scaled_PB_uw+ RC*scaled_SB_uw + CCA*scaled_Trust_uw+ RC*scaled_Trust_uw + scaled_SN_uw + scaled_EC_uw  + scaled_CNS_uw + scaled_CIJM_uw + scaled_TB_uw+ scaled_inc_int + scaled_edu_int + scaled_age, data =  attentive_con_data)
+
+results_model4b <- multiple_regression_summary(model4b)
+#results_model4b
+```
+
+```{r}
+update_excel(wb4, "all variables", results_model4a, results_model4b)  
+```
+
+```{r}
+#export excel sheet
+saveWorkbook(wb4, "Study3_Results/plots_uw/Linear_Reg_attentive.xlsx", overwrite = TRUE)
+```
+
+```{r}
+save(pvowners_con_data, file = "final_data.RData")
+```

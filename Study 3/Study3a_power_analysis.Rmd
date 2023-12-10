@@ -1,0 +1,151 @@
+---
+title: "Power Analysis for Sloan Study 3 Part A"
+output: html_notebook
+---
+
+
+```{r results ='hide', warning=FALSE, message=FALSE}
+library(tidyverse)
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(rlist)
+library(pwr)
+library(Superpower)
+```
+
+
+```{r}
+generate_data <- function(sample_size, effect_size) {
+
+experiment_data <- tibble(group = rep(c(3.0, 6.0, 10.0), each=sample_size/3), data = rnorm(sample_size,mean = 3.5, sd = 1))
+
+experiment_data$PB <- rnorm(sample_size, mean = 3.5, sd = 1)
+
+experiment_data$soft <- rnorm(sample_size, mean = 3.5, sd = 1)
+
+experiment_data <- experiment_data %>% mutate(outcome = case_when(group == 3.0 ~ data - effect_size[1], group == 6.0 ~ data - effect_size[2], group == 10.0 ~ data - effect_size[3]))
+return(experiment_data)
+}
+```
+
+```{r}
+experiment_data <- generate_data(2700, c(0.5, 0.8, 1.0))
+experiment_data
+```
+
+```{r}
+fit1 <- lm(outcome ~ group + PB + soft + PB*group + soft*group, data = experiment_data)
+summary(fit1)
+```
+
+```{r}
+calculate_power_anv <- function(effect_size, sample_size, n_simulations, alpha){
+# initialize an empty vector called "signif" to store data from the loop
+
+signif <- array(0, dim = c(n_simulations))
+# use a for loop to "conduct the experiment" n_simulation times
+for(i in 1:n_simulations){
+  # generate data
+  experiment_data <- generate_data(sample_size, effect_size)
+  # run statistical test
+  model <- aov(outcome ~ group,data=experiment_data) # input appropriate statistical test
+  # check if the p-value is < alpha
+  # this will store a TRUE or FALSE (Boolean value) in signif
+  # if TRUE, this means we found an effect
+  signif[i] <- (summary(model)[[1]]$`Pr(>F)`[1] < alpha)
+  }
+# calculate the percent of experiments that found an effect
+power <- mean(signif) # proportion of TRUE
+return(power)
+}
+```
+
+```{r}
+sample_size <- 500
+effect_size <- c(0.2, 0.4, 0.6)
+
+```
+
+```{r}
+calculate_power_anv(effect_size, sample_size, n_simulations = 1000, alpha = 0.05)
+```
+```{r}
+experiment_data <- generate_data(sample_size, effect_size)
+```
+
+```{r}
+
+fit1 <- lm(outcome ~ group + Distrust + CNS + CJIM + age, data = experiment_data)
+summary(fit1)
+```
+
+```{r}
+calculate_power_lm <- function(effect_size, sample_size, n_simulations){
+# initialize an empty vector called "signif" to store data from the loop
+
+# use a for loop to "conduct the experiment" n_simulation times
+#for(i in 1:n_simulations){
+  # generate data
+  experiment_data <- generate_data(sample_size, effect_size)
+  # run statistical test
+  model1 <- lm(outcome ~ group , data = experiment_data) # input appropriate statistical test
+
+# Compute the F-test statistics and critical value
+rss <- sum(resid(model1)^2)
+df1 <- 7 # number of independent variables
+df2 <- sample_size - 8 # residual degrees of freedom
+msr <- sum((model1$fitted.values - mean(experiment_data$outcome))^2) / df1
+mse <- rss / df2
+f_stat <- msr / mse
+f_crit <- qf(1 - 0.05, df1, df2)
+
+# Compute the power
+p <- pf(f_crit - f2 / (f2 + 1) * sqrt(f2 * (df1 + df2 + 1) / df1), df1, df2, lower.tail = FALSE)
+power <- 1 - p
+return(power)
+}
+```
+
+```{r}
+calculate_power_lm(effect_size, sample_size, n_simulations = 1000)
+```
+
+```{r}
+# Set parameters
+n <- 500 # sample size
+alpha <- 0.05 # significance level
+power <- 0.8 # desired power
+f2 <- 0.3 # effect size
+
+# Generate data
+set.seed(123)
+interest <- rnorm(n, mean = 2.5, sd = 1.5)
+group <- factor(sample(c("A", "B", "C", "D"), n, replace = TRUE))
+cns <- rnorm(n, mean = 2.5, sd = 1.5)
+cjim <- rnorm(n, mean = 2.5, sd = 1.5)
+distrust <- rnorm(n, mean = 2.5, sd = 1.5)
+age <- rnorm(n, mean = 45, sd = 16)
+
+# Fit the model
+model <- lm(interest ~ group + cns + cjim + distrust + age)
+
+# Compute the F-test statistics and critical value
+rss <- sum(resid(model)^2)
+df1 <- 5 # number of independent variables
+df2 <- n - 6 # residual degrees of freedom
+msr <- sum((model$fitted.values - mean(interest))^2) / df1
+mse <- rss / df2
+f_stat <- msr / mse
+f_crit <- qf(1 - alpha, df1, df2)
+
+# Compute the power
+p <- pf(f_crit - f2 / (f2 + 1) * sqrt(f2 * (df1 + df2 + 1) / df1), df1, df2, lower.tail = FALSE)
+power <- 1 - p
+
+# Interpret the results
+# If the power is below the desired level (0.8), consider increasing the sample size or effect size.
+# If the power is above the desired level, the sample size or effect size can be reduced.
+power
+```
+

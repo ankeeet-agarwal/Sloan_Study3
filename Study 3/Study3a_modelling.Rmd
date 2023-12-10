@@ -1,0 +1,397 @@
+---
+title: "Sloan Study 3a Modelling"
+output: html_notebook
+---
+
+```{r results ='hide', warning=FALSE, message=FALSE}
+library(tidyverse)
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(rlist)
+library(lavaan)
+library(semTools)
+library(gridExtra)
+library(rms)
+library(writexl)
+```
+
+```{r}
+load("model_data_3a.RData")
+head(con_data)
+```
+
+### Create binary dependent variables
+
+```{r}
+#create binary variable for dependent values as linear regression would not be possible
+
+con_data <- con_data %>% mutate(interest_bin = if_else(int_Interest >= 6, 1, 0, missing = NULL))
+
+con_data <- con_data %>% mutate(intention_bin = if_else(int_Intention >= 6, 1, 0, missing = NULL))
+
+head(con_data)
+```
+### peform standardization transform
+```{r}
+model_variables <- c("PB_w", "Trust_w", "SB_w", "EC_w", "CNS_w", "CIJM_w", "SN_w", "int_Interest", "int_Intention", "TB_w", "inc_int", "edu_int", "age", "bill", "ac_score")
+con_data <- con_data %>%  mutate(across(all_of(model_variables), ~ scale(.), .names = "scaled_{.col}"))
+```
+
+```{r}
+head(con_data)
+```
+
+## Models with whole sample
+
+
+### Create logit models
+
+
+```{r}
+calculate_logit_metrics <- function(model) {
+  # Get coefficient estimates and standard errors
+  coefficients <- coef(model)
+  standard_errors <- summary(model)$coefficients[, "Std. Error"]
+
+  # Convert coefficients to odds ratios
+  odds_ratios <- exp(coefficients)
+
+  # Calculate confidence intervals for odds ratios
+  lower_ci <- exp(coefficients - 1.96 * standard_errors)
+  upper_ci <- exp(coefficients + 1.96 * standard_errors)
+
+  # Get p-values of odds ratios
+  p_values <- summary(model)$coefficients[, "Pr(>|z|)"]
+  
+   # Calculate log-likelihood
+  log_likelihood <- logLik(model)
+
+  # Calculate AIC
+  aic <- AIC(model)
+
+  # Calculate Pseudo R-squared (Cox-Snell or Nagelkerke)
+  deviance_residual <- model$null.deviance - model$deviance 
+  pseudo_r_squared <- deviance_residual / model$null.deviance
+
+  # Create a data frame to store results
+  results <- data.frame(
+    OddsRatio = odds_ratios,
+    PValue = p_values,
+    StdError = standard_errors,
+    LogLikelihood = log_likelihood,
+    AIC = aic,
+    PseudoRSquared = pseudo_r_squared
+  )
+
+  return(results)
+}
+
+```
+
+#### First include only message related variables
+```{r}
+# Fit a logistic regression model
+model_messagesvsint1 <- glm(interest_bin ~ RC + CCA+  scaled_PB_w +  scaled_Trust_w +  scaled_SB_w + scaled_EC_w+  scaled_CNS_w +  scaled_CIJM_w +  scaled_SN_w +  scaled_TB_w +  scaled_inc_int+ scaled_edu_int +  scaled_age + scaled_bill, data = con_data, family = binomial)
+
+# Call the function and get the results
+results_model_messagesvsint1 <- calculate_logit_metrics(model_messagesvsint1)
+results_model_messagesvsint1
+```
+
+
+```{r}
+# Call the function and get the results
+# Fit a logistic regression model
+model_messagesvsint2 <- glm(intention_bin ~ RC + CCA+  scaled_PB_w +  scaled_Trust_w +  scaled_SB_w + scaled_EC_w+  scaled_CNS_w +  scaled_CIJM_w +  scaled_SN_w +  scaled_TB_w +  scaled_inc_int+ scaled_edu_int +  scaled_age + scaled_bill, data = con_data, family = binomial)
+
+results_model_messagesvsint2 <- calculate_logit_metrics(model_messagesvsint2)
+results_model_messagesvsint2
+```
+
+
+#### Second include belief variables as main effects and message related variables
+```{r}
+model_beliefsvsint1 <- glm(interest_bin ~ RC + CCA + RC*CCA+ scaled_PB_w + scaled_Trust_w + scaled_SB_w + scaled_EC_w+ scaled_CNS_w + scaled_CIJM_w + scaled_SN_w + scaled_TB_w + scaled_inc_int+scaled_edu_int + scaled_age +scaled_bill, data = con_data, family = binomial)
+
+results_model_beliefsvsint1<- calculate_logit_metrics(model_beliefsvsint1)
+results_model_beliefsvsint1
+```
+
+```{r}
+model_beliefsvsint2 <- glm(intention_bin ~ RC + CCA + RC*CCA+ scaled_PB_w + scaled_Trust_w + scaled_SB_w + scaled_EC_w+ scaled_CNS_w + scaled_CIJM_w + scaled_SN_w + scaled_TB_w + scaled_inc_int+scaled_edu_int + scaled_age +scaled_bill, data = con_data, family = binomial)
+
+results_model_beliefsvsint2<- calculate_logit_metrics(model_beliefsvsint2)
+results_model_beliefsvsint2
+```
+### Third, message related variables with interaction with beliefs
+```{r}
+model_beliefs_messagevsint1 <- glm(interest_bin ~ RC + CCA + RC*CCA + scaled_PB_w + RC*scaled_PB_w + scaled_SB_w + RC*scaled_SB_w + scaled_Trust_w + CCA*scaled_Trust_w + RC*scaled_Trust_w + scaled_EC_w  + scaled_CNS_w + scaled_CIJM_w + scaled_SN_w + scaled_TB_w + scaled_inc_int+scaled_edu_int + scaled_age +scaled_bill, data = con_data, family = binomial)
+
+results_model_beliefs_messagevsint1 <- calculate_logit_metrics(model_beliefs_messagevsint1)
+results_model_beliefs_messagevsint1 
+```
+
+```{r}
+model_beliefs_messagevsint2 <- glm(intention_bin ~ RC + CCA + RC*CCA + scaled_PB_w + RC*scaled_PB_w + scaled_SB_w + RC*scaled_SB_w + scaled_Trust_w + CCA*scaled_Trust_w + RC*scaled_Trust_w + scaled_EC_w  + scaled_CNS_w + scaled_CIJM_w + scaled_SN_w + scaled_TB_w + scaled_inc_int+scaled_edu_int + scaled_age +scaled_bill, data = con_data, family = binomial)
+
+
+results_model_beliefs_messagevsint2 <- calculate_logit_metrics(model_beliefs_messagevsint2)
+results_model_beliefs_messagevsint2
+```
+
+
+### Fourth just main effects and demographic variables
+
+```{r}
+model_maineffectsvsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w + col_edu + inc_int + bill_fixed + Female + White + liberal + democrat + age, data = con_data, family = binomial)
+
+results_model_maineffectsvsint1 <- calculate_logit_metrics(model_maineffectsvsint1)
+results_model_maineffectsvsint1
+```
+
+```{r}
+model_maineffectsvsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w + col_edu + inc_int + bill_fixed + Female + White + liberal + democrat + age, data = con_data, family = binomial)
+
+results_model_maineffectsvsint2 <- calculate_logit_metrics(model_maineffectsvsint2)
+results_model_maineffectsvsint2
+```
+
+### Anovas to measure the effect of messages
+```{r}
+# Perform two-way ANOVA
+anova_interest <- aov(int_Interest ~ RC + CCA_fact + RC:CCA_fact, data = con_data)
+
+
+anova_intention <- aov(int_Intention ~ RC + CCA_fact + RC:CCA_fact, data = con_data)
+# Display ANOVA summary
+summary(anova_interest)
+summary(anova_intention)
+```
+
+
+## Modeling by controlling for homeownership
+```{r}
+#repeat anovas time time filtering for homeowners
+homeowners_con_data <- con_data %>% filter(home_bin == 1)
+```
+
+#### First include only message related variables
+```{r}
+# Fit a logistic regression model
+model_messagesvsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin, data = homeowners_con_data, family = binomial)
+
+# Call the function and get the results
+results_model_messagesvsint1 <- calculate_logit_metrics(model_messagesvsint1)
+results_model_messagesvsint1
+```
+
+
+```{r}
+# Call the function and get the results
+# Fit a logistic regression model
+model_messagesvsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin, data = homeowners_con_data, family = binomial)
+
+results_model_messagesvsint2 <- calculate_logit_metrics(model_messagesvsint2)
+results_model_messagesvsint2
+```
+
+
+#### Second include belief variables as main effects and message related variables
+```{r}
+model_beliefsvsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w + CNS_w + CIJM_w + SN_w + TB_w, data = homeowners_con_data, family = binomial)
+
+results_model_beliefsvsint1<- calculate_logit_metrics(model_beliefsvsint1)
+results_model_beliefsvsint1
+```
+
+```{r}
+model_beliefsvsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w + CNS_w + CIJM_w + SN_w + TB_w, data = homeowners_con_data, family = binomial)
+
+results_model_beliefsvsint2<- calculate_logit_metrics(model_beliefsvsint2)
+results_model_beliefsvsint2
+```
+### Third, message related variables with interaction with beliefs
+```{r}
+model_beliefs_messagevsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + RC*PB_w + SB_w + RC*SB_w + Trust_w + CCA_aware_bin*Trust_w + RC*Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w, data = homeowners_con_data, family = binomial)
+
+results_model_beliefs_messagevsint1 <- calculate_logit_metrics(model_beliefs_messagevsint1 )
+results_model_beliefs_messagevsint1 
+```
+
+```{r}
+model_beliefs_messagevsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + RC*PB_w + SB_w + RC*SB_w + Trust_w + CCA_aware_bin*Trust_w + RC*Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w, data = homeowners_con_data, family = binomial)
+
+
+results_model_beliefs_messagevsint2 <- calculate_logit_metrics(model_beliefs_messagevsint2)
+results_model_beliefs_messagevsint2
+```
+
+
+### Fourth just main effects and demographic variables
+
+```{r}
+model_maineffectsvsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w + col_edu + inc_int + bill_fixed + Female + White + liberal + democrat + age, data = homeowners_con_data, family = binomial)
+
+results_model_maineffectsvsint1 <- calculate_logit_metrics(model_maineffectsvsint1)
+results_model_maineffectsvsint1
+```
+
+```{r}
+model_maineffectsvsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w + col_edu + inc_int + bill_fixed + Female + White + liberal + democrat + age, data = homeowners_con_data, family = binomial)
+
+results_model_maineffectsvsint2 <- calculate_logit_metrics(model_maineffectsvsint2)
+results_model_maineffectsvsint2
+```
+
+## Modeling by controlling for PV ownership
+
+```{r}
+#repeat anovas time time filtering for homeowners
+pvowners_con_data <- con_data %>% filter(have_solar_bin == 0)
+```
+
+#### First include only message related variables
+```{r}
+# Fit a logistic regression model
+model_messagesvsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin, data = pvowners_con_data, family = binomial)
+
+# Call the function and get the results
+results_model_messagesvsint1 <- calculate_logit_metrics(model_messagesvsint1)
+results_model_messagesvsint1
+```
+
+
+```{r}
+# Call the function and get the results
+# Fit a logistic regression model
+model_messagesvsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin, data = pvowners_con_data, family = binomial)
+
+results_model_messagesvsint2 <- calculate_logit_metrics(model_messagesvsint2)
+results_model_messagesvsint2
+```
+
+
+#### Second include belief variables as main effects and message related variables
+```{r}
+model_beliefsvsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w + CNS_w + CIJM_w + SN_w + TB_w, data = pvowners_con_data, family = binomial)
+
+results_model_beliefsvsint1<- calculate_logit_metrics(model_beliefsvsint1)
+results_model_beliefsvsint1
+```
+
+```{r}
+model_beliefsvsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w + CNS_w + CIJM_w + SN_w + TB_w, data = pvowners_con_data, family = binomial)
+
+results_model_beliefsvsint2<- calculate_logit_metrics(model_beliefsvsint2)
+results_model_beliefsvsint2
+```
+### Third, message related variables with interaction with beliefs
+```{r}
+model_beliefs_messagevsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + RC*PB_w + SB_w + RC*SB_w + Trust_w + CCA_aware_bin*Trust_w + RC*Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w, data = pvowners_con_data, family = binomial)
+
+results_model_beliefs_messagevsint1 <- calculate_logit_metrics(model_beliefs_messagevsint1 )
+results_model_beliefs_messagevsint1 
+```
+
+```{r}
+model_beliefs_messagevsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + RC*PB_w + SB_w + RC*SB_w + Trust_w + CCA_aware_bin*Trust_w + RC*Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w, data = pvowners_con_data, family = binomial)
+
+
+results_model_beliefs_messagevsint2 <- calculate_logit_metrics(model_beliefs_messagevsint2)
+results_model_beliefs_messagevsint2
+```
+
+
+### Fourth just main effects and demographic variables
+
+```{r}
+model_maineffectsvsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w + col_edu + inc_int + bill_fixed + Female + White + liberal + democrat + age, data = pvowners_con_data, family = binomial)
+
+results_model_maineffectsvsint1 <- calculate_logit_metrics(model_maineffectsvsint1)
+results_model_maineffectsvsint1
+```
+
+```{r}
+model_maineffectsvsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w + col_edu + inc_int + bill_fixed + Female + White + liberal + democrat + age, data = pvowners_con_data, family = binomial)
+
+results_model_maineffectsvsint2 <- calculate_logit_metrics(model_maineffectsvsint2)
+results_model_maineffectsvsint2
+```
+
+
+## Modeling by controlling for attentiveness
+
+
+```{r}
+#repeat anovas time time filtering for homeowners
+attentive_con_data <- con_data %>% filter(attentive == 1)
+```
+
+#### First include only message related variables
+```{r}
+# Fit a logistic regression model
+model_messagesvsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin, data = attentive_con_data, family = binomial)
+
+# Call the function and get the results
+results_model_messagesvsint1 <- calculate_logit_metrics(model_messagesvsint1)
+results_model_messagesvsint1
+```
+
+
+```{r}
+# Call the function and get the results
+# Fit a logistic regression model
+model_messagesvsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin, data = attentive_con_data, family = binomial)
+
+results_model_messagesvsint2 <- calculate_logit_metrics(model_messagesvsint2)
+results_model_messagesvsint2
+```
+
+
+#### Second include belief variables as main effects and message related variables
+```{r}
+model_beliefsvsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w + CNS_w + CIJM_w + SN_w + TB_w, data = attentive_con_data, family = binomial)
+
+results_model_beliefsvsint1<- calculate_logit_metrics(model_beliefsvsint1)
+results_model_beliefsvsint1
+```
+
+```{r}
+model_beliefsvsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w + CNS_w + CIJM_w + SN_w + TB_w, data = attentive_con_data, family = binomial)
+
+results_model_beliefsvsint2<- calculate_logit_metrics(model_beliefsvsint2)
+results_model_beliefsvsint2
+```
+### Third, message related variables with interaction with beliefs
+```{r}
+model_beliefs_messagevsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + RC*PB_w + SB_w + RC*SB_w + Trust_w + CCA_aware_bin*Trust_w + RC*Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w, data = attentive_con_data, family = binomial)
+
+results_model_beliefs_messagevsint1 <- calculate_logit_metrics(model_beliefs_messagevsint1 )
+results_model_beliefs_messagevsint1 
+```
+
+```{r}
+model_beliefs_messagevsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + RC*CCA_aware_bin + PB_w + RC*PB_w + SB_w + RC*SB_w + Trust_w + CCA_aware_bin*Trust_w + RC*Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w, data = attentive_con_data, family = binomial)
+
+
+results_model_beliefs_messagevsint2 <- calculate_logit_metrics(model_beliefs_messagevsint2)
+results_model_beliefs_messagevsint2
+```
+
+
+### Fourth just main effects and demographic variables
+
+```{r}
+model_maineffectsvsint1 <- glm(interest_bin ~ RC + CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w + col_edu + inc_int + bill_fixed + Female + White + liberal + democrat + age, data = attentive_con_data, family = binomial)
+
+results_model_maineffectsvsint1 <- calculate_logit_metrics(model_maineffectsvsint1)
+results_model_maineffectsvsint1
+```
+
+```{r}
+model_maineffectsvsint2 <- glm(intention_bin ~ RC + CCA_aware_bin + PB_w + SB_w + Trust_w + EC_w  + CNS_w + CIJM_w + SN_w + TB_w + col_edu + inc_int + bill_fixed + Female + White + liberal + democrat + age, data = attentive_con_data, family = binomial)
+
+results_model_maineffectsvsint2 <- calculate_logit_metrics(model_maineffectsvsint2)
+results_model_maineffectsvsint2
+```

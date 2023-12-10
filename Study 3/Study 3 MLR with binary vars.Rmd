@@ -1,0 +1,118 @@
+
+```{r results ='hide', warning=FALSE, message=FALSE}
+library(tidyverse)
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(rlist)
+library(lavaan)
+library(semTools)
+library(gridExtra)
+library(rms)
+library(writexl)
+library(openxlsx)
+```
+
+
+```{r}
+load("model_data_3a.RData")
+head(con_data)
+```
+
+```{r}
+create_binary_column <- function(dependent_column) {
+  new_col_name <- paste0("bin_", dependent_column)
+  result <- ifelse(dependent_column >= 5, 1, 0)
+  return(result)
+}
+
+# Apply the function to create new binary columns for each input column
+con_data$bin_PB_w <- create_binary_column(con_data$PB_w)
+con_data$bin_Trust_w <- create_binary_column(con_data$Trust_w)
+con_data$bin_SB_w <- create_binary_column_rev(con_data$SB_w)
+# Print the resulting dataframe
+con_data
+```
+```{r}
+model_variables <- c("EC_w", "CNS_w", "CIJM_w", "SN_w", "int_Interest", "int_Intention", "TB_w", "inc_int", "edu_int", "age", "bill", "ac_score")
+con_data <- con_data %>%  mutate(across(all_of(model_variables), ~ scale(.), .names = "scaled_{.col}"))
+```
+
+## Linear Regression
+
+### linear regression using scaled values
+```{r}
+#function to return linear regression results
+
+multiple_regression_summary <- function(model) {
+  # Get coefficient estimates
+  coefficients <- coef(model)
+  
+  # Get standard errors
+  standard_errors <- sqrt(diag(vcov(model)))
+  
+  # Get p-values
+  p_values <- summary(model)$coefficients[, "Pr(>|t|)"]
+  
+  # Calculate AIC
+  aic <- AIC(model)
+  
+  # Calculate adjusted R-squared
+  adj_r_squared <- summary(model)$adj.r.squared
+  # Calculate Variance Inflation Factors (VIF)
+  vif_values <- vif(model)
+  
+   n_observations <- nrow(model$model)
+  
+  # Create a summary data frame
+  summary_data <- data.frame(
+    Coefficient = coefficients,
+    StdError = standard_errors,
+    PValue = p_values,
+    AIC = aic,
+    AdjRSquared = adj_r_squared,
+    VIF = c("NA", vif_values),
+    N_Observations = n_observations
+  )
+  
+  return(summary_data)
+}
+```
+
+#### First include only message related variables and main effects
+```{r}
+# Fit a linear regression model for interest
+model1a <- lm( scaled_int_Interest ~ RC + CCA+  bin_PB_w +  bin_Trust_w +  bin_SB_w, data = con_data)
+
+# Call the function and get the results
+results_model1a <- multiple_regression_summary(model1a)
+results_model1a
+
+```
+```{r}
+# Fit a linear regression model for interest
+model1b <- lm( scaled_int_Intention ~ RC + CCA+  bin_PB_w +  bin_Trust_w +  bin_SB_w, data = con_data)
+
+# Call the function and get the results
+results_model1b <- multiple_regression_summary(model1b)
+results_model1b
+
+```
+
+
+```{r}
+model2a <- lm(scaled_int_Interest ~ RC + CCA + RC*CCA+ bin_PB_w*RC + bin_Trust_w*RC+ bin_Trust_w*CCA + bin_SB_w*RC, data = con_data)
+
+# Call the function and get the results
+results_model2a <- multiple_regression_summary(model2a)
+results_model2a
+```
+
+```{r}
+# Fit a logistic regression model for interest
+model2b <- lm(scaled_int_Intention ~ RC + CCA + RC*CCA+ scaled_PB_w*RC + scaled_Trust_w*RC+ scaled_Trust_w*CCA + scaled_SB_w*RC, data = con_data)
+
+# Call the function and get the results
+results_model2b <- multiple_regression_summary(model2b)
+results_model2b
+```

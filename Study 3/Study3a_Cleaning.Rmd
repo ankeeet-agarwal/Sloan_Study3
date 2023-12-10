@@ -1,0 +1,333 @@
+---
+title: "Sloan Study 3a Data Cleaning"
+author: "Ankit Agarwal"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r results ='hide', warning=FALSE, message=FALSE}
+library(tidyverse)
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(rlist)
+library(zipcodeR)
+library(logitr)
+```
+### Data importing
+```{r}
+#import raw data
+
+rawdata <- read.csv("Raw data/Sloan_final_dataset.csv")
+head(rawdata)
+```
+
+```{r}
+#Adjust the columns, remove first two rows which dont have data, reset row names
+con_data <- rawdata[-c(1:2), ]
+rownames(con_data) <- NULL
+con_data <- as_tibble(con_data)
+head(con_data)
+```
+```{r}
+#Remove incomplete rows
+con_data$Finished <- as.logical(con_data$Finished)
+con_data <- con_data %>% subset(Finished == TRUE)
+con_data
+```
+###Converting to variables to numeric when necessary
+
+```{r}
+#convert numeric columns to integer
+con_data$Condition_num <- as.numeric(con_data$Condition)
+con_data$bill <- as.integer(con_data$bill)
+con_data$birth_year_1 <- as.integer(con_data$birth_year_1)
+head(con_data)
+```
+
+
+```{r}
+#create attention score 
+
+#create a recoded column fro first attention check
+con_data <- con_data %>% mutate(AC1_coded = if_else((AC1 == 'New Electricity Provider' & (Condition_num >= 4 & Condition_num <= 7)) | (AC1 == 'Your Current Electricity Provider' &  Condition_num <= 3),  "Correct", "Incorrect", missing = NULL))
+
+con_data <- con_data %>% mutate(AC2_coded = if_else((AC100_NC == 'TRUE' & Condition_num < 7) | (AC60_NC == 'TRUE'& Condition_num < 7)|(AC30_NC == 'TRUE'& Condition_num < 7), "Correct", "Incorrect", missing = NULL))
+
+
+con_data <- con_data %>% mutate(AC3_coded = if_else((AC3 == 'Solar,Wind,Biomass,Hydropower' & Condition_num < 7), "Correct","Incorrect", missing = NULL))
+
+con_data <- con_data %>% mutate(PV_AC = if_else((PV_AC1 == 'Installation,Maintenance,Troubleshooting,Financing'), "Correct", "Incorrect", missing = NULL))
+
+head(con_data)
+```
+```{r}
+#calculate attention score
+con_data$ac_score <- rowMeans(con_data[, 75:78] == "Correct")
+
+#adjust attention score for people in groups with fewer questions
+con_data <- con_data %>% mutate(ac_score = if_else(Condition == 7, ac_score*2, ac_score))
+
+con_data <- con_data %>% mutate(ac_score = if_else(Condition == 8, ac_score*4, ac_score))
+head(con_data)
+```
+
+```{r}
+#create a dummy variable for participants who got all ACs right
+
+con_data <- con_data %>% mutate(attentive = if_else(ac_score == 1.0 , 1,0, missing = NULL))
+
+con_data
+
+```
+
+```{r}
+#convert all likert measures to integers (straight scales)
+#use another variable to check if reversed scale is needed
+
+
+likert_to_integer <- function(likert_responses) {
+  likert_mapping <- c("Strongly disagree" = 1,
+                      "Disagree" = 2,
+                      "Somewhat disagree" = 3,
+                      "Neither agree nor disagree" = 4,
+                      "Somewhat agree" = 5,
+                      "Agree" = 6,
+                      "Strongly agree" = 7, "Don't Know" = NA)
+  integer_responses <- likert_mapping[likert_responses]
+  return(integer_responses)
+}
+```
+
+```{r}
+# Define the column indices you want to convert (non-reversed scales only)
+
+#first choose columns that are on straight scales phase by phase
+column_indices_to_convert1 <- 25:34  # Range from 25 to 34
+column_indices_to_convert2 <- 36:44  # Range from 36 to 44
+column_indices_to_convert3 <- 48:54  # Range from 48 to 54
+
+# Convert likert responses to integers for all columns till SN2
+con_data <- con_data %>%
+  mutate(across(column_indices_to_convert1, ~ likert_to_integer(.), .names = "int_{.col}"))
+
+# Convert likert responses to integers for all columns from TB1 to cns3
+con_data <- con_data %>%
+  mutate(across(column_indices_to_convert2, ~ likert_to_integer(.), .names = "int_{.col}"))
+
+con_data <- con_data %>%
+  mutate(across(column_indices_to_convert3, ~ likert_to_integer(.), .names = "int_{.col}"))
+
+con_data
+```
+
+```{r}
+#convert all likert measures to integers (reversed scales)
+
+likert_to_integer_rev <- function(likert_responses) {
+  likert_mapping <- c("Strongly disagree" = 7,
+                      "Disagree" = 6,
+                      "Somewhat disagree" = 5,
+                      "Neither agree nor disagree" = 4,
+                      "Somewhat agree" = 3,
+                      "Agree" = 2,
+                      "Strongly agree" = 1, "Don't Know" = NA)
+  integer_responses <- likert_mapping[likert_responses]
+  return(integer_responses)
+}
+
+# Define the column indices you want to convert
+column_indices_to_convert <- c(35,45,46,47)  #Sn3, cjim1, cjim2, cjim3
+
+# Convert likert responses to integers for selected columns and create new columns
+con_data <- con_data %>%
+  mutate(across(column_indices_to_convert, ~ likert_to_integer_rev(.), .names = "int_{.col}"))
+
+con_data
+```
+
+
+```{r}
+#create another column for bill, get rid of outliers and NAs
+boxplot.stats(con_data$bill)
+
+#INTERQUARTILE RANGE is 234, so keeping observations greater than 0 and less than 600
+con_data <- con_data %>% mutate(bill_fixed = if_else((bill > 0 & bill < 600), bill, NULL))
+head(con_data)
+```
+
+
+```{r}
+# Check if the name column has a hyphen and extract characters before it
+con_data$Zip <- sub("-.*", "", con_data$Zip)
+
+
+con_data <- con_data %>% mutate(zip_fixed = if_else(nchar(Zip)==4, paste("0", Zip, sep = ""), Zip, missing = NULL))
+
+con_data
+```
+
+
+```{r}
+# Add a new column with the state based on the zip code
+
+con_data <- con_data %>% mutate(State = ifelse(nchar(zip_fixed)==5, reverse_zipcode(con_data$zip_fixed)$state, NA))
+con_data
+```
+
+
+```{r}
+con_data <- subset(con_data, State %in% c("CA", "IL", "OH", "VA", "MD", "NJ", "NY", "NH", "MA", "RI", "AZ", "CO", "MI", "CT", "WA", "OR", "NM"))
+
+con_data
+```
+
+```{r}
+#create function definition for creating dummy variables for CCA awareness, home ownership, 
+#PV ownership, Democrat affiliation, gender = Female, race = white
+
+make_bin <- function(x, a){
+  if_else(x == a, 1, 0, missing = NULL)
+}
+
+#call the function for one demographic variable at a time
+con_data <- con_data %>% mutate(CCA_aware_bin = make_bin(CCA_aware, "Yes"))
+
+con_data <- con_data %>% mutate(home_bin = make_bin(home, "Yes"))
+
+con_data <- con_data %>% mutate(have_solar_bin = make_bin(have_solar, "Yes"))
+
+con_data <- con_data %>% mutate(pv_ads_bin = make_bin(pv_ads, "Yes"))
+
+con_data <- con_data %>% mutate(democrat = make_bin(politics, "Democrat"))
+
+con_data <- con_data %>% mutate(Female = make_bin(gender, "Female"))
+
+con_data <- con_data %>% mutate(White = make_bin(race, "White or Caucasian"))
+
+head(con_data)
+```
+```{r}
+#calculate age
+
+#convert birth year to integer
+
+con_data$age <- 2023 - con_data$birth_year_1
+head(con_data)
+```
+
+
+
+
+```{r}
+#function to convert education and income responses to integer
+
+string_to_integer <- function(responses, map) {
+  
+  integer_responses <- map[responses]
+  return(integer_responses)
+}
+
+```
+
+```{r}
+  edu_mapping <- c("Some high school or less" = 1,
+                      "High school diploma or GED" = 2,
+                      "Somewhat disagree" = 3,
+                      "Some college but no degree" = 4,
+                      "Associates or technical degree" = 5,
+                      "Bachelor's degree" = 6,
+                      "Graduate or professional degree (MA, MS, MBA, PhD, JD, MD, DDS etc." = 7,
+                      "Prefer not to say" = NA)
+
+con_data$edu_int <- string_to_integer(con_data$edu, edu_mapping)
+
+head(con_data)
+```
+```{r}
+#create dummy variable for college education
+con_data <- con_data %>% mutate(col_edu = if_else(edu_int > 5, 1, 0, missing = NULL))
+head(con_data)
+```
+
+```{r}
+inc_mapping <- c("Less than $25,000" = 1,
+                 "$25,000 - $49,999" = 2,
+                 "$50,000 - $74,999" = 3,
+                 "$75,000 - $99,999" = 4,
+                 "$100,000 - $149,999" = 5,
+                 "$150,000 or more" = 6,
+                 "Prefer not to say" = NA)
+con_data$inc_int <- string_to_integer(con_data$inc, inc_mapping)
+```
+
+```{r}
+con_data <- con_data %>% mutate(liberal = if_else(ideology == "Very Liberal" | ideology == "Liberal", 1, 0, missing = NULL))
+
+head(con_data)
+```
+```{r}
+#create another factor column for experimental condition to facilitate EDA
+con_mapping <- c("1" = "NC30",
+                 "2" = "NC60",
+                 "3" = "NC100",
+                 "4" = "CCA30",
+                "5" = "CCA60",
+                "6" = "CCA100",
+                "7" = "CCA_only",
+                "8" = "No_info")
+
+con_data$Condition_fact <- string_to_integer(con_data$Condition, con_mapping)
+```
+
+
+```{r}
+#create Renewable Content and CCA context Variable column
+
+
+#CCA context
+con_data <- con_data %>% mutate(CCA = if_else((Condition == "4" | Condition == "5" | Condition == "6" |Condition == "7"), 1, 0, missing = NULL) )
+
+```
+
+
+```{r}
+#create a factor column of CCA context for plotting
+
+con_data <- con_data %>% mutate(CCA_fact = if_else(CCA == 1, "CCA Context", "Current Utility/No Context", missing = NULL))
+
+con_data$CCA_fact <- factor(con_data$CCA_fact, levels = c("Current Utility/No Context","CCA Context"))
+```
+
+```{r}
+#Renewable Content
+RC_mapping <- c("1" = "RC30",
+                 "2" = "RC60",
+                 "3" = "RC100",
+                 "4" = "RC30",
+                "5" = "RC60",
+                "6" = "RC100",
+                "7" = "No_info",
+                "8" = "No_info")
+
+con_data$RC <- string_to_integer(con_data$Condition, RC_mapping)
+
+
+con_data
+```
+
+
+```{r}
+#order the RC variable factors
+con_data$Condition_fact <- factor(con_data$Condition_fact, levels = c("No_info","CCA_only", "NC30", "NC60", "NC100", "CCA30","CCA60","CCA100"))
+
+con_data$RC <- factor(con_data$RC, levels = c("No_info","RC30","RC60","RC100"))
+con_data
+```
+
+```{r}
+save(con_data, file = "clean_data_3a.RData")
+```
+

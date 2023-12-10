@@ -1,0 +1,445 @@
+---
+title: "Sloan Study 3a Exploratory Analysis"
+output: html_notebook
+---
+
+
+```{r results ='hide', warning=FALSE, message=FALSE}
+library(tidyverse)
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(rlist)
+library(lavaan)
+library(semTools)
+library(gridExtra)
+library(corrplot)
+library(writexl)
+```
+
+
+```{r}
+load("CFA_clean_data_3.RData")
+con_data
+```
+### Numeric Summary of all latent variables
+
+```{r}
+columns_to_summarize <- c("int_Interest", "int_Intention", "PB_w", "SB_w", "Trust_w", "EC_w", "CNS_w", "CIJM_w", "SN_w", "TB_w", "bill_fixed", "age", "ac_score")
+
+# Calculate means and standard deviations by category for specified columns
+latent_means_group <- con_data %>%  group_by(Condition_fact) %>%  summarise_at(vars(columns_to_summarize),list(Mean = ~ mean(., na.rm = TRUE), SD = ~ sd(., na.rm = TRUE))
+  )
+latent_means_group
+```
+
+```{r}
+# Count NAs in each column
+na_counts <- colSums(is.na(con_data))
+na_counts
+```
+
+
+```{r}
+# Calculate means and standard deviations by category for specified columns
+latent_means <- con_data  %>% summarise_at(vars(columns_to_summarize),list(Mean = ~ mean(., na.rm = TRUE), SD = ~ sd(., na.rm = TRUE)))
+latent_means
+```
+#### Univariate plots of belief variables
+```{r}
+#function to create univariate histograms
+
+create_pretty_histogram <- function(data, variable_column, x_axis_title, bwide) {
+  
+ ggplot(data, aes(x = !!sym(variable_column))) +
+    geom_histogram(binwidth = bwide, fill = "#66c2a5", color = "#5A5A5A", bins = 10, alpha = 0.7,aes(y = (..count..)/sum(..count..) * 100)) +
+    scale_fill_viridis_d(option = "magma", guide = "none") +
+    labs(
+      x = x_axis_title,
+      y = "Percentage"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_blank(), 
+      axis.title = element_text(size = 12),
+      axis.text = element_text(size = 10),
+      legend.position = "none"
+    )
+}
+```
+
+```{r}
+#Create multiple plots
+#PB
+hist_pb <- create_pretty_histogram(con_data, "PB_w", "Perceived Benefits", 0.15)
+
+#SB
+hist_sb <- create_pretty_histogram(con_data, "SB_w", "Soft Barriers", 0.15)
+
+#Trust
+hist_tr <- create_pretty_histogram(con_data, "Trust_w", "Trust", 0.5)
+
+#EC
+hist_ec <- create_pretty_histogram(con_data, "EC_w", "Environmental Concern", 0.15)
+
+#CNS
+hist_cns <- create_pretty_histogram(con_data, "CNS_w", "Consumer Novelty Seeking", 0.15)
+
+#cIJm
+hist_cijm <- create_pretty_histogram(con_data, "CIJM_w", "Consumer Independent Judgement Making", 0.15)
+
+#SN
+hist_sn <- create_pretty_histogram(con_data, "SN_w", "Subjective Norms", 0.15)
+
+#TB
+hist_tb <- create_pretty_histogram(con_data, "TB_w", "Technical Barriers", 0.5)
+
+#Interest
+hist_interest <- create_pretty_histogram(con_data, "int_Interest", "Interest", 1.0)
+
+#Intention
+hist_intention <- create_pretty_histogram(con_data, "int_Intention", "Intention", 1.0)
+
+latent_var_plots <- grid.arrange(hist_interest, hist_intention, hist_pb, hist_sb, hist_tr, hist_ec, hist_cns, hist_cijm, hist_sn, hist_tb, ncol = 3)
+
+latent_var_plots
+```
+#### transformed plots of latent variables
+```{r}
+# Export the grid as an image
+ggsave("Study3_Results/latent_var_plots.png", latent_var_plots, width = 10, height = 6, units = "in")
+```
+
+
+
+```{r}
+#try transforming the variables and see what are the changes to distribution
+
+selected_columns <- c("PB_w", "SB_w", "Trust_w", "EC_w", "CNS_w", "CIJM_w", "SN_w", "int_Interest", "int_Intention", "SN_w", "TB_w")
+transformed_data <- con_data %>%
+  mutate(across(all_of(selected_columns), ~ scale(.), .names = "log_{.col}"))
+
+```
+
+```{r}
+#Create multiple plots
+#PB
+hist_pb <- create_pretty_histogram(transformed_data, "log_PB_w", "Percieved Benefits", 0.15)
+
+#SB
+hist_sb <- create_pretty_histogram(transformed_data, "log_SB_w", "Soft Barriers", 0.15)
+
+#Trust
+hist_tr <- create_pretty_histogram(transformed_data, "log_Trust_w", "Trust", 0.15)
+
+#EC
+hist_ec <- create_pretty_histogram(transformed_data, "log_EC_w", "Environmental Concern", 0.15)
+
+#CNS
+hist_cns <- create_pretty_histogram(transformed_data, "log_CNS_w", "Consumer Novelty Seeking", 0.15)
+
+#cIJm
+hist_cijm <- create_pretty_histogram(transformed_data, "log_CIJM_w", "Consumer Independent Judgement Making", 0.15)
+
+#SN
+hist_sn <- create_pretty_histogram(transformed_data, "log_SN_w", "Subjective Norms", 0.15)
+
+#TB
+hist_tb <- create_pretty_histogram(transformed_data, "log_TB_w", "Technical Barriers", 0.15)
+
+#Interest
+hist_interest <- create_pretty_histogram(transformed_data, "log_int_Interest", "Interest", 0.3)
+#Intention
+hist_intention <- create_pretty_histogram(transformed_data, "log_int_Intention", "Intention", 0.3)
+
+latent_var_plots_trans <- grid.arrange(hist_interest, hist_intention, hist_pb, hist_sb,hist_tr, hist_ec, hist_cns, hist_cijm, hist_sn, hist_tb, ncol = 3)
+
+latent_var_plots_trans
+```
+
+```{r}
+ggsave("Study3_Results/scaledtrans_plots.png", latent_var_plots_trans, width = 10, height = 6, units = "in")
+```
+  
+  
+```{r}
+#create distribution of age, income, education, bill
+
+hist_inc <- create_pretty_histogram(con_data, "inc_int", "Income Level", 1.0)
+
+hist_edu <- create_pretty_histogram(con_data, "edu_int", "Education Level", 1.0)
+
+hist_age <- create_pretty_histogram(con_data, "age", "Age", 1.0)
+
+hist_bill <- create_pretty_histogram(con_data, "bill_fixed", "Average Mnthly Bill", 10.0)
+
+dem_var_plots_trans <- grid.arrange(hist_inc, hist_edu, hist_age , hist_bill, ncol = 2)
+
+dem_var_plots_trans
+```
+```{r}
+ggsave("Study3_Results/dem_var_plots.png", dem_var_plots_trans, width = 10, height = 6, units = "in")
+```
+  
+
+### Numeric summary of demographic variable
+
+```{r}
+#find demographic distibution of the entire sample
+
+calculate_percentage_presence <- function(data, column_name) {
+  # Calculate percentage of times each unique string is present
+  unique_strings <- unique(data[[column_name]])
+  percentage_presence <- table(data[[column_name]]) / nrow(data) * 100
+  
+  # Create a data frame to store the results
+  result_df <- data.frame(
+    Unique_String = unique_strings,
+    Percentage_Presence = percentage_presence
+  )
+  
+  return(result_df)
+}
+
+# Apply the function to selected columns
+selected_columns <- c("CCA_aware", "home", "have_solar", "pv_ads", "edu", "inc", "ideology", "politics", "gender", "race", "State", "Condition_fact")
+result_list <- lapply(selected_columns, function(col) calculate_percentage_presence(con_data, col))
+
+# Print the results for each selected column
+for (i in seq_along(selected_columns)) {
+  cat("Results for", selected_columns[i], ":\n")
+  print(result_list[[i]])
+  cat("\n")
+}
+```
+
+```{r}
+## Get counts per group assignment
+con_data %>%
+  count(Condition_fact)
+```
+```{r}
+# Calculate the percentage of attentive respondents per group
+con_data %>%
+  group_by(Condition_fact) %>%
+  summarize(PercentageOnes = mean(attentive == 1) * 100)
+
+
+```
+
+
+```{r}
+#determine demographic distributions by groups
+
+calculate_percentage_presence_grouped <- function(data, group_column, selected_columns) {
+  result <- data %>%
+    group_by({{ group_column }}) %>%
+    summarise(across(all_of(selected_columns), ~ prop.table(table(.)) * 100))
+  
+  return(result)
+}
+
+
+result_list <- lapply(selected_columns, function(col) calculate_percentage_presence_grouped(con_data, con_data$Condition_fact, col))
+
+# Print the results for each selected column
+for (i in seq_along(selected_columns)) {
+  cat("Results for", selected_columns[i], ":\n")
+  print(result_list[[i]])
+  cat("\n")
+}
+```
+
+
+###Line Plots
+
+```{r}
+regplot <- function(data, xvar, yvar, xlab, ylab, heading){
+  ggplot(data, aes(x = !!sym(xvar), y = !!sym(yvar))) +
+ geom_point(position = position_jitter(height = 0.1, width = 0.1), alpha = 0.6) +  
+  geom_smooth(method = "lm", color = "blue")  + 
+  labs(title = heading,
+       x = xlab,
+       y = ylab) +
+  theme_minimal() +                    # Minimalistic theme
+  theme(axis.title = element_text(size = 8), axis.text = element_text(size = 8), plot.title = element_text(hjust = 0.5, size = 10))  # Center the plot title
+}
+```
+
+
+```{r}
+#
+pbvsint1 <- regplot(con_data, "PB_w", "int_Interest", "Perceived Benefits", "Interest", "Perceived Benefits vs Dependent Variables")
+pbvsint2 <- regplot(con_data, "PB_w", "int_Intention", "Perceived Benefits", "Intention", " ")
+
+sbvsint1 <- regplot(con_data, "SB_w", "int_Interest", "Soft Barriers", "Interest", "Soft_Barriers vs Dependent Variables")
+sbvsint2 <- regplot(con_data, "SB_w", "int_Intention", "Soft Barriers", "Intention", " ")
+
+Trustvsint1 <- regplot(con_data, "Trust_w", "int_Interest", "Trust", "Interest", "Trust vs Dependent Variables")
+Trustvsint2 <- regplot(con_data, "Trust_w", "int_Intention", "Trust", "Intention", " ")
+
+
+samp_reg_plots <- grid.arrange(pbvsint1, pbvsint2, sbvsint1, sbvsint2, Trustvsint1, Trustvsint2, ncol = 2)
+samp_reg_plots
+ggsave("Study3_Results/samp_reg_plots.png", samp_reg_plots, width = 10, height = 6, units = "in")
+```
+```{r}
+facet_regplot <- function(data, xvar, yvar, fvar, xlab, ylab, heading){
+ggplot(data, aes(x = !!sym(xvar), y = !!sym(yvar))) +
+  geom_point(position = position_jitter(height = 0.1, width = 0.1), alpha = 0.6) +  geom_smooth(method = "lm", color = "blue") +  facet_wrap(as.formula(paste("~", fvar)) , ncol = 2) +  labs(title = heading, x = xlab, y = ylab) +
+  theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
+}
+```
+
+```{r}
+#
+pbvsintF1 <- facet_regplot(con_data, "PB_w", "int_Interest", "RC", "Perceived Benefits", "Interest", "Perceived Benefits vs Interest and Intention for different renewable content")
+
+pbvsintF2 <- facet_regplot(con_data, "PB_w", "int_Intention", "RC","Perceived Benefits", "Intention"," ")
+
+sbvsintF1 <- facet_regplot(con_data, "SB_w", "int_Interest","RC", "Soft Barriers", "Interest", "Soft Barriers vs  Interest and Intention for different renewable content")
+sbvsintF2 <- facet_regplot(con_data, "SB_w", "int_Intention","RC", "Soft Barriers", "Intention", " ")
+
+TrustvsintF1 <- facet_regplot(con_data, "Trust_w", "int_Interest","RC", "Trust", "Interest", "Trust vs Interest and Intention for different renewable content")
+TrustvsintF2 <- facet_regplot(con_data, "Trust_w", "int_Intention","RC", "Trust", "Intention", " ")
+
+fpb_plot <- grid.arrange(pbvsintF1, pbvsintF2, ncol = 2)
+fsb_plot <- grid.arrange(sbvsintF1, sbvsintF2, ncol = 2)
+ftrust_plot <- grid.arrange(TrustvsintF1, TrustvsintF2, ncol = 2)
+ggsave("Study3_Results/fpb_plot.png", fpb_plot, width = 10, height = 6, units = "in")
+ggsave("Study3_Results/fsb_plot.png", fsb_plot, width = 10, height = 6, units = "in")
+ggsave("Study3_Results/ftrust_plot.png", ftrust_plot, width = 10, height = 6, units = "in")
+```
+```{r}
+#line plot with CCA context as facet
+
+con_pbvsintF1 <- facet_regplot(con_data, "PB_w", "int_Interest", "CCA_fact", "Perceived Benefits", "Interest", "Perceived Benefits vs Interest and Intention in both contexts")
+con_pbvsintF2 <- facet_regplot(con_data, "PB_w", "int_Intention", "CCA_fact","Perceived Benefits", "Intention"," ")
+
+con_sbvsintF1 <- facet_regplot(con_data, "SB_w", "int_Interest","CCA_fact", "Soft Barriers", "Interest", "Soft Barriers vs  Interest and Intention in both contexts")
+con_sbvsintF2 <- facet_regplot(con_data, "SB_w", "int_Intention","CCA_fact", "Soft Barriers", "Intention", " ")
+
+con_TrustvsintF1 <- facet_regplot(con_data, "Trust_w", "int_Interest","CCA_fact", "Trust", "Interest", "Trust vs Interest and Intention in both contexts")
+con_TrustvsintF2 <- facet_regplot(con_data, "Trust_w", "int_Intention","CCA_fact", "Trust", "Intention", " ")
+
+```
+
+```{r}
+con_plots <- grid.arrange(con_pbvsintF1, con_pbvsintF2,con_sbvsintF1,con_sbvsintF2,con_TrustvsintF1,con_TrustvsintF2, ncol = 2)
+
+ggsave("Study3_Results/con_reg_plots.png", con_plots, width = 10, height = 6, units = "in")
+```
+
+```{r}
+boxwplot <- function(data, xvar, yvar, xlab, ylab, xval, heading){
+ggplot(data, aes(x = !!sym(xvar), y = !!sym(yvar), fill = !!sym(xvar))) +
+  geom_boxplot(alpha = 0.7) + stat_summary(fun.y=mean, geom="point", shape=20, size=3, color="dark red",
+             position = position_dodge2(width = 0.75,   
+                                        preserve = "single")) +
+  labs(title = heading,
+       x = xlab,
+       y = ylab) +
+  theme_minimal() +
+  theme(legend.position = "none", text = element_text(size=9)) + scale_x_discrete(labels=xval)
+}
+```
+
+```{r}
+rcvsint <- boxwplot(con_data, "RC", "int_Interest", "Renewable Content", "Interest",c('No Info', '30% green', '60% green', '100%'), "Interest by Renewable Content")
+
+rcvsinten <- boxwplot(con_data, "RC", "int_Intention", "Renewable Content", "Intention", c('No Info', '30% green', '60% green', '100%'), "Intention by Renewable Content")
+
+rcvsdep <- grid.arrange(rcvsint,rcvsinten, ncol = 1)
+ggsave("Study3_Results/RenewableContentvsDependentplots.png", rcvsdep, width = 10, height = 6, units = "in")
+```
+```{r}
+grvsinterest <- boxwplot(con_data, "Condition_fact", "int_Interest", "Group Assignment", "Interest", c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), "Dependent Variable Variation by Group Assignment")
+
+grvsintention <- boxwplot(con_data, "Condition_fact", "int_Intention", "Group Assignment", "Intention", c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), "Dependent Variable Variation by Group Assignment")
+
+# Combine the plots using grid.arrange
+combined_plots <- grid.arrange(grvsinterest,grvsintention, ncol = 1)
+```
+
+```{r}
+# Export the grid as an image
+ggsave("Study3_Results/dep_var_plots.png", combined_plots, width = 10, height = 6, units = "in")
+```
+
+```{r}
+#make boxplots by CCA context
+
+
+convsinterest <- boxwplot(con_data, "CCA_fact", "int_Interest", "Group Assignment", "Interest", c('No Context/Current Utility', 'CCA Context'), "Dependent Variable Variation by Group Assignment")
+
+convsintention <- boxwplot(con_data, "CCA_fact", "int_Intention", "Group Assignment", "Intention", c('No Context/Current Utility', 'CCA Context'), "Dependent Variable Variation by Group Assignment")
+
+
+con_combined_plots <- grid.arrange(convsinterest,convsintention, ncol = 1)
+
+# Export the grid as an image
+ggsave("Study3_Results/con_combined_plots.png", con_combined_plots, width = 10, height = 6, units = "in")
+```
+
+```{r}
+## correlation of all dependent and independent variables
+require(corrplot)
+modeldata <- con_data %>% select(int_Ben1,int_Ben2, int_Ben3, int_Ben4, int_SB1,  int_SB2 , int_SB3, int_SB4, int_SN1, int_SN2, int_SN3, int_TB1,int_TB2, int_cns1, int_cns2, int_cns3, int_penv_nature, int_penv_localcom, int_penv_world,int_Distrust1, int_Distrust2, int_penv_futuregen, int_penv_worrycc, int_penv_impcom, int_penv_impworld,int_cijm1, int_cijm2, int_cijm3, int_Interest, int_Intention)
+modeldata<-na.omit(modeldata)
+
+#calculate correlation
+correlations <- cor(modeldata)
+
+#plot correlation
+png("Study3_Results/corr_plots_bms.png", width = 1000, height = 1000)
+
+corrplot(correlations, method = "color", outline = T, addgrid.col = "darkgray", order="hclust", addrect = 4, rect.col = "black", rect.lwd = 5,cl.pos = "b", tl.col = "indianred4", tl.cex = 1.5, cl.cex = 1.5, addCoef.col = "white", number.digits = 2, number.cex = 0.75, col = colorRampPalette(c("darkred","white","midnightblue"))(100))
+
+dev.off()  # Close the graphics device
+```
+
+```{r}
+## correlation of all observed measures
+require(corrplot)
+modeldata <- con_data %>% select(int_Interest, int_Intention,inc_int,liberal,PB_w,SB_w,Trust_w,EC_w,CNS_w,CIJM_w,SN_w, bill_fixed, age,CCA_aware_bin,home_bin,have_solar_bin,pv_ads_bin,democrat,Female, White,attentive,col_edu)
+modeldata<-na.omit(modeldata)
+
+#calculate correlation
+correlations <- cor(modeldata)
+
+#plot correlation
+png("Study3_Results/corr_plots.png", width = 1000, height = 1000)
+
+corrplot(correlations, method = "color", outline = T, addgrid.col = "darkgray", order="hclust", addrect = 4, rect.col = "black", rect.lwd = 5,cl.pos = "b", tl.col = "indianred4", tl.cex = 1.5, cl.cex = 1.5, addCoef.col = "white", number.digits = 2, number.cex = 0.75, col = colorRampPalette(c("darkred","white","midnightblue"))(100))
+
+dev.off()  # Close the graphics device
+```
+
+
+```{r}
+ pbvsgrp<- boxwplot(con_data, "Condition_fact", "PB_w", "Group Assignment", "Perceived Benefits", c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), "Independent Variable Variation by Group Assignment")
+
+sbvsgrp<- boxwplot(con_data, "Condition_fact", "SB_w", "Group Assignment", "Soft Barriers",c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), " ")
+ 
+trvsgrp<- boxwplot(con_data, "Condition_fact", "Trust_w", "Group Assignment", "Trust in Utility", c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), " ")
+
+bi_boxplots1 <- grid.arrange(pbvsgrp, sbvsgrp, trvsgrp, ncol = 1)
+ggsave("Study3_Results/bi_boxplots1.png", bi_boxplots1, width = 10, height = 6, units = "in")
+```
+```{r}
+ ecvsgrp<- boxwplot(con_data, "Condition_fact", "EC_w", "Group Assignment", "Environmental Concern", c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), "Independent Variable Variation by Group Assignment")
+
+snvsgrp<- boxwplot(con_data, "Condition_fact", "SN_w", "Group Assignment", "Subjective Norms",c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), " ")
+ 
+tbvsgrp<- boxwplot(con_data, "Condition_fact", "TB_w", "Group Assignment", "Technical Barriers", c('No Message', 'CCA only', '30% green (No CCA)', '60% green (No CCA)','100% green (No CCA)','CCA 30% green', 'CCA 60% green', 'CCA 100% green'), " ")
+
+bi_boxplots2 <- grid.arrange(ecvsgrp,snvsgrp, tbvsgrp, ncol = 1)
+ggsave("Study3_Results/bi_boxplots2.png", bi_boxplots2, width = 10, height = 6, units = "in")
+```
+
+
+```{r}
+save(con_data, file = "model_data_3a.RData")
+```
+
+

@@ -1,0 +1,208 @@
+---
+title: "CFA"
+output: html_notebook
+---
+
+```{r results ='hide', warning=FALSE, message=FALSE}
+library(tidyverse)
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(rlist)
+library(lavaan)
+library(semTools)
+library(gridExtra)
+```
+
+```{r}
+load("clean_data_3a.RData")
+head(con_data)
+```
+
+```{r}
+
+calculate_cfa_metrics <- function(data, cfa_model) {
+  # Fit the CFA model
+  
+  fit <- sem(cfa_model, data = data)
+  
+  # Extract factor loadings
+  factor_loadings <- unclass(cfa(fit)$lambda)
+  
+  # Calculate Cronbach's alpha
+  item_cov_matrix <- cov(data)
+  n_items <- ncol(data)
+  alpha <- (n_items / (n_items - 1)) * (1 - sum(diag(item_cov_matrix)) / sum(item_cov_matrix))
+  
+  # Calculate weighted average
+  weights <- factor_loadings^2
+  weighted_average <- sum(weights * colMeans(data))
+  
+  result <- list(
+    factor_loadings = factor_loadings,
+    cronbach_alpha = alpha,
+    weighted_average = weighted_average
+  )
+  
+  return(result)
+}
+```
+
+
+```{r}
+#calculate CFA metrics for TPB variables
+PV_model <- 'PB =~ int_Ben1 + int_Ben2 + int_Ben3 + int_Ben4
+             SB =~ int_SB1 +  int_SB2 + int_SB3 +  int_SB4
+             Trust =~ int_Distrust1 + int_Distrust2
+             EC =~ int_penv_nature + int_penv_localcom + int_penv_world + int_penv_futuregen + int_penv_worrycc + int_penv_impcom + int_penv_impworld
+             CNS =~ int_cns1 + int_cns2 + int_cns3
+             CIJM =~ int_cijm1 + int_cijm2 + int_cijm3
+             SN =~ int_SN1 + int_SN2 + int_SN3
+             TB =~ int_TB1 + int_TB2'
+             
+# Calculate CFA metrics
+PV_fit <- cfa(PV_model, data = con_data)
+summary(PV_fit, standardized=TRUE)
+```
+```{r}
+fitmeasures(PV_fit, c('cfi', 'rmsea', 'rmsea.ci.upper','rmsea.ci.lower', 'bic', 'chisq', 'tli'))
+```
+
+```{r}
+reliability(PV_fit, what = c("alpha", "omega", "omega2", "omega3", "ave"))
+```
+```{r}
+#take first 28 rows of the standardized solutions to get factor loadings
+fact_loads <- standardizedsolution(PV_fit)$est.st[1:28]
+sq_fact_loads <- fact_loads^2
+sq_fact_loads
+```
+```{r}
+# Function to normalize a vector to a 0 to 1 scale
+normalize_0to1 <- function(x) {
+  (x) / (sum(x))
+}
+```
+
+```{r}
+# Normalize the first 4 rows of the column vector for pb weights
+weights_PB <- (normalize_0to1(sq_fact_loads[1:4]))
+
+weights_SB <- (normalize_0to1(sq_fact_loads[5:8]))
+
+weights_Trust <- (normalize_0to1(sq_fact_loads[9:10]))
+
+weights_EC <- (normalize_0to1(sq_fact_loads[11:17]))
+
+weights_CNS <- (normalize_0to1(sq_fact_loads[18:20]))
+
+weights_CIJM <- (normalize_0to1(sq_fact_loads[21:23]))
+
+weights_SN <- (normalize_0to1(sq_fact_loads[24:26]))
+
+weights_TB <- (normalize_0to1(sq_fact_loads[27:28]))
+```
+
+```{r}
+calculate_and_attach_means <- function(data, selected_columns, new_column_name) {
+  # Calculate the means of selected columns for each row
+  means <- rowMeans(data %>% select(all_of(selected_columns)), na.rm = TRUE)
+  
+  # Add the means as a new column to the original tibble
+  data <- data %>% 
+    mutate(!!new_column_name := means)
+  
+  return(data)
+}
+```
+
+```{r}
+con_data <- calculate_and_attach_means(con_data, c("int_Ben1", "int_Ben2", "int_Ben3", "int_Ben4"), "PB_uw")
+
+con_data <- calculate_and_attach_means(con_data, c("int_SN1", "int_SN2", "int_SN3"), "SN_uw")
+
+con_data <- calculate_and_attach_means(con_data, c("int_TB1", "int_TB2"), "TB_uw")
+con_data <- calculate_and_attach_means(con_data, c("int_SN1", "int_SN2", "int_SN3"), "SN_uw")
+
+con_data <- calculate_and_attach_means(con_data, c("int_SB1", "int_SB2", "int_SB3", "int_SB4"), "SB_uw")
+
+con_data <- calculate_and_attach_means(con_data, c("int_cns1", "int_cns2", "int_cns3"), "CNS_uw")
+con_data <- calculate_and_attach_means(con_data, c("int_cijm1", "int_cijm2", "int_cijm3"), "CIJM_uw")
+con_data <-  calculate_and_attach_means(con_data, c("int_Distrust1", "int_Distrust2"), "Trust_uw")
+
+con_data <- calculate_and_attach_means(con_data, c("int_penv_nature", "int_penv_localcom", "int_penv_world", "int_penv_futuregen", "int_penv_worrycc", "int_penv_impcom", "int_penv_impworld"), "EC_uw")
+
+con_data
+```
+
+
+```{r}
+#calculate PB latent variable
+con_data <- con_data %>% mutate(PB_w= weights_PB[1]*int_Ben1 + weights_PB[2]*int_Ben2 + weights_PB[3]*int_Ben3+ weights_PB[4]*int_Ben4)
+
+head(con_data)
+```
+
+
+
+```{r}
+#calculate SB latent variable
+con_data <- con_data %>% mutate(SB_w= weights_SB[1]*int_SB1 + weights_SB[2]*int_SB2 + weights_SB[3]*int_SB3+ weights_SB[4]*int_SB4)
+
+head(con_data)
+```
+
+```{r}
+#calculate Trust latent variable
+con_data <- con_data %>% mutate(Trust_w= weights_Trust[1]*int_Distrust1 + weights_Trust[2]*int_Distrust2)
+
+head(con_data)
+```
+```{r}
+#calculate EC latent variable
+con_data <- con_data %>% mutate(EC_w= weights_EC[1]*int_penv_nature + weights_EC[2]*int_penv_localcom + weights_EC[3]*int_penv_world+ weights_EC[4]*int_penv_futuregen + weights_EC[5]*int_penv_worrycc + weights_EC[6]*int_penv_impcom + weights_EC[7]*int_penv_impworld)
+
+head(con_data)
+```
+
+```{r}
+#calculate CNS latent variable
+con_data <- con_data %>% mutate(CNS_w= weights_CNS[1]*int_cns1 + weights_CNS[2]*int_cns2 + weights_CNS[3]*int_cns3)
+
+#calculate CNS unweighted means for comparison
+con_data <- con_data %>% mutate(CNS_uw=(int_cns1 + int_cns2 + int_cns3)/3)
+
+head(con_data)
+```
+
+```{r}
+#calculate CIJM latent variable
+con_data <- con_data %>% mutate(CIJM_w= weights_CIJM[1]*int_cijm1 + weights_CIJM[2]*int_cijm2 + weights_CIJM[3]*int_cijm3)
+
+head(con_data)
+```
+```{r}
+#calculate CIJM latent variable
+con_data <- con_data %>% mutate(CIJM_w= weights_CIJM[1]*int_cijm1 + weights_CIJM[2]*int_cijm2 + weights_CIJM[3]*int_cijm3)
+
+head(con_data)
+```
+
+```{r}
+#calculate SN latent variable
+con_data <- con_data %>% mutate(SN_w= weights_SN[1]*int_SN1 + weights_SN[2]*int_SN2 + weights_SN[3]*int_SN3)
+
+head(con_data)
+```
+
+```{r}
+#calculate Trust latent variable
+con_data <- con_data %>% mutate(TB_w= weights_TB[1]*int_TB1 + weights_TB[2]*int_TB2)
+
+head(con_data)
+```
+
+```{r}
+save(con_data, file = "CFA_clean_data_3.RData")
+```
+

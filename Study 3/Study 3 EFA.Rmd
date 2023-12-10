@@ -1,0 +1,38 @@
+
+```{r results ='hide', warning=FALSE, message=FALSE}
+library(tidyverse)
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(rlist)
+library(lavaan)
+library(semTools)
+library(gridExtra)
+library(psych)
+```
+
+
+```{r}
+load("clean_data_3a.RData")
+head(con_data)
+```
+
+```{r}
+# Specify the columns you want to use for EFA
+selected_columns <- con_data[, c("int_Ben1","int_Ben2", "int_Ben3", "int_Ben4", "int_SB1",  "int_SB2" , "int_SB3", "int_SB4", "int_SN1", "int_SN2", "int_SN3", "int_TB1","int_TB2", "int_cns1", "int_cns2", "int_cns3", "int_penv_nature", "int_penv_localcom", "int_penv_world","int_Distrust1", "int_Distrust2", "int_penv_futuregen", "int_penv_worrycc", "int_penv_impcom", "int_penv_impworld","int_cijm1", "int_cijm2", "int_cijm3")]
+
+# Perform the Exploratory Factor Analysis (EFA)
+efa_result <- fa(selected_columns, nfactors = 5, rotate = "varimax")
+
+# View the EFA results
+efa_result
+
+```
+
+
+```{r}
+fit <- efa(data = selected_columns, nfactors = 1:7)
+summary(fit)
+
+```
+
